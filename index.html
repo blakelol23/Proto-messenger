@@ -79,13 +79,15 @@
       flex-direction: column;
       height: 100%;
       background: rgba(26, 27, 56, 0.7);
+      border: 1px solid rgba(0, 221, 235, 0.5);
       border-radius: 12px;
-      padding: 12px;
-      box-shadow: inset 0 0 10px rgba(0, 221, 235, 0.2);
+      padding: 8px;
+      box-shadow: 0 0 15px rgba(0, 221, 235, 0.3), inset 0 0 10px rgba(0, 221, 235, 0.1);
+      overflow: hidden;
     }
     #chatTitle {
       flex-shrink: 0;
-      margin: 0 0 12px 0;
+      margin: 0 0 8px 0;
       font-family: 'Orbitron', sans-serif;
       font-size: 1.8em;
       color: #00DDEB;
@@ -94,19 +96,22 @@
     }
     #controls {
       display: flex;
-      gap: 8px;
+      gap: 6px;
       align-items: center;
       flex-shrink: 0;
+      padding: 6px 0;
+      margin-top: auto;
     }
     #message {
       flex: 1;
-      padding: 10px;
+      padding: 8px 10px;
       background: rgba(255, 255, 255, 0.1);
       border: 1px solid #00DDEB;
       border-radius: 8px;
       color: #E0E7FF;
-      font-size: 1em;
+      font-size: 0.95em;
       transition: box-shadow 0.3s ease;
+      height: 36px;
     }
     #message:focus {
       outline: none;
@@ -120,7 +125,7 @@
       border: 1px solid rgba(0, 221, 235, 0.5);
       border-radius: 12px;
       padding: 12px;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
       background: rgba(10, 11, 26, 0.5);
       scrollbar-width: thin;
       scrollbar-color: #6B5BFF #1C1E3D;
@@ -155,30 +160,20 @@
       text-shadow: 0 0 5px rgba(0, 221, 235, 0.5);
     }
     button {
-      padding: 10px 16px;
+      padding: 8px 12px;
       background: linear-gradient(45deg, #6B5BFF, #A100F2);
       border: none;
       border-radius: 8px;
       color: #E0E7FF;
       font-family: 'Orbitron', sans-serif;
-      font-size: 1em;
+      font-size: 0.9em;
       cursor: pointer;
       transition: transform 0.2s, box-shadow 0.2s;
+      height: 36px;
     }
     button:hover {
       transform: scale(1.05);
       box-shadow: 0 0 15px rgba(107, 91, 255, 0.7);
-    }
-    #startDmBtn {
-      min-width: 80px;
-      padding: 8px 12px;
-      font-size: 0.85em;
-      box-shadow: 0 0 8px rgba(107, 91, 255, 0.4);
-      height: 36px;
-    }
-    #startDmBtn:hover {
-      box-shadow: 0 0 15px rgba(161, 0, 242, 0.7);
-      transform: scale(1.03);
     }
     .chatItem {
       cursor: pointer;
@@ -246,7 +241,7 @@
       font-style: italic;
       color: #B0B8FF;
       height: 20px;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
       flex-shrink: 0;
       text-shadow: 0 0 4px rgba(107, 91, 255, 0.5);
     }
@@ -314,7 +309,6 @@
   <h3>Your Chats</h3>
   <div id="dmBox">
     <input id="startDmUid" placeholder="Start DM with username..." />
-    <button id="startDmBtn">Start DM</button>
   </div>
 </div>
 
@@ -338,7 +332,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const typingIndicator = document.getElementById("typingIndicator");
   const chatTitle = document.getElementById("chatTitle");
   const startDmUid = document.getElementById("startDmUid");
-  const startDmBtn = document.getElementById("startDmBtn");
 
   // Username
   function getDeviceUsername() {
@@ -773,12 +766,6 @@ document.addEventListener("DOMContentLoaded", () => {
     setupAllUnreadListeners();
   }
 
-  startDmBtn.addEventListener('click', () => {
-    const username = startDmUid.value.trim();
-    if (!username) return alert("Enter username");
-    createDMByUsername(username).catch(console.error);
-    startDmUid.value = '';
-  });
   startDmUid.addEventListener('keyup', e => {
     if (e.key === "Enter") {
       const username = startDmUid.value.trim();
