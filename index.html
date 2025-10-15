@@ -3,112 +3,304 @@
 <head>
   <meta charset="UTF-8">
   <title>Firebase Multi-Chat</title>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
   <style>
     html {
       height: 100%;
     }
-    body { 
-      font-family: Arial, sans-serif; 
+    body {
+      font-family: 'Poppins', sans-serif;
       height: 100%;
       margin: 0;
       padding: 0;
       overflow: hidden;
+      background: radial-gradient(circle at center, #1C1E3D 0%, #0A0B1A 100%);
+      color: #E0E7FF;
+      position: relative;
+    }
+    /* Starry background */
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      background: radial-gradient(
+        circle,
+        rgba(255, 255, 255, 0.2) 1px,
+        transparent 1px
+      );
+      background-size: 10px 10px;
+      opacity: 0.3;
+      animation: twinkle 5s infinite alternate;
+    }
+    @keyframes twinkle {
+      0% { opacity: 0.3; }
+      100% { opacity: 0.5; }
     }
     .app {
       max-width: 900px;
       margin: 30px auto;
       height: calc(100vh - 60px);
       display: flex;
-      gap: 10px;
+      gap: 12px;
+      background: rgba(10, 11, 26, 0.6);
+      backdrop-filter: blur(8px);
+      border-radius: 16px;
+      box-shadow: 0 0 20px rgba(0, 221, 235, 0.3);
+      padding: 12px;
     }
-    #chatList { 
-      width: 28%; 
-      border: 1px solid #000; 
+    #chatList {
+      width: 28%;
+      background: linear-gradient(135deg, rgba(107, 91, 255, 0.2), rgba(161, 0, 242, 0.2));
+      border: 1px solid rgba(0, 221, 235, 0.5);
+      border-radius: 12px;
       height: 100%;
-      overflow-y: auto; 
-      padding: 5px; 
+      overflow-y: auto;
+      padding: 12px;
+      scrollbar-width: thin;
+      scrollbar-color: #00DDEB #1C1E3D;
     }
-    #chatArea { 
-      width: 72%; 
-      display: flex; 
-      flex-direction: column; 
+    #chatList::-webkit-scrollbar {
+      width: 8px;
+    }
+    #chatList::-webkit-scrollbar-track {
+      background: #1C1E3D;
+    }
+    #chatList::-webkit-scrollbar-thumb {
+      background: #00DDEB;
+      border-radius: 4px;
+    }
+    #chatArea {
+      width: 72%;
+      display: flex;
+      flex-direction: column;
       height: 100%;
+      background: rgba(26, 27, 56, 0.7);
+      border-radius: 12px;
+      padding: 12px;
+      box-shadow: inset 0 0 10px rgba(0, 221, 235, 0.2);
     }
     #chatTitle {
       flex-shrink: 0;
-      margin: 0 0 10px 0;
+      margin: 0 0 12px 0;
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.8em;
+      color: #00DDEB;
+      text-shadow: 0 0 8px rgba(0, 221, 235, 0.7);
+      letter-spacing: 1px;
     }
-    #controls { 
-      display:flex; 
-      gap:6px; 
-      align-items:center; 
+    #controls {
+      display: flex;
+      gap: 8px;
+      align-items: center;
       flex-shrink: 0;
     }
-    #message { 
-      flex:1; 
-      padding:6px; 
+    #message {
+      flex: 1;
+      padding: 10px;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid #00DDEB;
+      border-radius: 8px;
+      color: #E0E7FF;
+      font-size: 1em;
+      transition: box-shadow 0.3s ease;
+    }
+    #message:focus {
+      outline: none;
+      box-shadow: 0 0 10px #00DDEB;
     }
     #chat {
       flex: 1;
       display: flex;
       flex-direction: column;
       overflow-y: auto;
-      border: 1px solid #000;
-      padding: 10px;
-      margin-bottom: 6px;
+      border: 1px solid rgba(0, 221, 235, 0.5);
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 8px;
+      background: rgba(10, 11, 26, 0.5);
+      scrollbar-width: thin;
+      scrollbar-color: #6B5BFF #1C1E3D;
+    }
+    #chat::-webkit-scrollbar {
+      width: 8px;
+    }
+    #chat::-webkit-scrollbar-track {
+      background: #1C1E3D;
+    }
+    #chat::-webkit-scrollbar-thumb {
+      background: #6B5BFF;
+      border-radius: 4px;
     }
     .message {
-      margin: 2px 0;
-      padding: 6px;
-      border-radius: 6px;
-      background: #f0f0f0;
+      margin: 6px 0;
+      padding: 10px;
+      border-radius: 10px;
+      background: linear-gradient(145deg, rgba(107, 91, 255, 0.3), rgba(161, 0, 242, 0.3));
+      color: #E0E7FF;
       word-break: break-word;
+      max-width: 80%;
+      position: relative;
+      animation: fadeIn 0.3s ease;
     }
-    button { padding:8px 12px; }
-    .message strong { color: #007BFF; }
-    .chatItem { 
-      cursor: pointer; 
-      padding: 8px; 
-      border-bottom: 1px solid #eee; 
-      position: relative; 
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .message strong {
+      color: #00DDEB;
+      text-shadow: 0 0 5px rgba(0, 221, 235, 0.5);
+    }
+    button {
+      padding: 10px 16px;
+      background: linear-gradient(45deg, #6B5BFF, #A100F2);
+      border: none;
+      border-radius: 8px;
+      color: #E0E7FF;
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1em;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    button:hover {
+      transform: scale(1.05);
+      box-shadow: 0 0 15px rgba(107, 91, 255, 0.7);
+    }
+    #startDmBtn {
+      min-width: 80px;
+      padding: 8px 12px;
+      font-size: 0.85em;
+      box-shadow: 0 0 8px rgba(107, 91, 255, 0.4);
+      height: 36px;
+    }
+    #startDmBtn:hover {
+      box-shadow: 0 0 15px rgba(161, 0, 242, 0.7);
+      transform: scale(1.03);
+    }
+    .chatItem {
+      cursor: pointer;
+      padding: 10px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      position: relative;
       display: flex;
       flex-direction: column;
-      gap: 4px;
+      gap: 6px;
+      border-radius: 8px;
+      transition: background 0.2s ease;
+      margin-bottom: 4px;
     }
-    .chatItem:hover { background: #e9f4ff; }
-    .activeChat { background: #d0f8ff !important; }
-    .badge { background:red; color:white; border-radius:50%; padding:2px 6px; font-size:0.8em; position:absolute; top:4px; right:6px; }
+    .chatItem:hover {
+      background: rgba(0, 221, 235, 0.2);
+    }
+    .activeChat {
+      background: linear-gradient(45deg, rgba(0, 221, 235, 0.3), rgba(107, 91, 255, 0.3)) !important;
+      box-shadow: 0 0 10px rgba(0, 221, 235, 0.5);
+    }
+    .badge {
+      background: #FF3366;
+      color: #E0E7FF;
+      border-radius: 50%;
+      padding: 4px 8px;
+      font-size: 0.8em;
+      position: absolute;
+      top: 8px;
+      right: 8px;
+    }
     .online-dot, .offline-dot {
       width: 6px;
       height: 6px;
       border-radius: 50%;
       margin: 0;
     }
-    .online-dot { background: #4CAF50; }
-    .offline-dot { background: #ccc; }
+    .online-dot {
+      background: #00FF85;
+      box-shadow: 0 0 8px #00FF85;
+    }
+    .offline-dot {
+      background: #66668F;
+    }
     .status-span {
       font-size: 0.75em;
-      color: #666;
-      background: #f8f8f8;
-      padding: 2px 6px;
-      border-radius: 4px;
+      color: #B0B8FF;
+      background: rgba(255, 255, 255, 0.05);
+      padding: 4px 8px;
+      border-radius: 6px;
       display: inline-flex;
       align-items: center;
       gap: 4px;
     }
-    .status-text { line-height: 1.2; }
-    .status-text.online { color: #4CAF50; }
-    .status-text.offline { color: #666; }
-    #typingIndicator { 
-      font-style: italic; 
-      color: gray; 
-      height:20px; 
-      margin-bottom:6px; 
-      flex-shrink: 0;
+    .status-text {
+      line-height: 1.2;
     }
-    #dmBox { margin-top:8px; display:flex; gap:6px; }
-    #startDmUid { flex:1; padding:6px; }
-    .loading { text-align: center; color: gray; font-style: italic; }
+    .status-text.online {
+      color: #00FF85;
+      text-shadow: 0 0 4px rgba(0, 255, 133, 0.5);
+    }
+    .status-text.offline {
+      color: #B0B8FF;
+    }
+    #typingIndicator {
+      font-style: italic;
+      color: #B0B8FF;
+      height: 20px;
+      margin-bottom: 8px;
+      flex-shrink: 0;
+      text-shadow: 0 0 4px rgba(107, 91, 255, 0.5);
+    }
+    #dmBox {
+      margin: 12px 0;
+      display: flex;
+      gap: 6px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 8px;
+      padding: 6px;
+      border: 1px solid rgba(107, 91, 255, 0.3);
+      box-shadow: 0 0 8px rgba(107, 91, 255, 0.2);
+    }
+    #startDmUid {
+      flex: 1;
+      padding: 6px 8px;
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(107, 91, 255, 0.1));
+      border: 1px solid rgba(107, 91, 255, 0.4);
+      border-radius: 4px;
+      color: #E0E7FF;
+      font-size: 0.85em;
+      font-family: 'Poppins', sans-serif;
+      line-height: 1.4;
+      height: 32px;
+      transition: all 0.3s ease;
+      box-shadow: inset 0 0 4px rgba(107, 91, 255, 0.1);
+    }
+    #startDmUid:focus {
+      outline: none;
+      box-shadow: 0 0 8px rgba(107, 91, 255, 0.6), inset 0 0 4px rgba(107, 91, 255, 0.2);
+      border-color: #A100F2;
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(107, 91, 255, 0.15));
+      transform: scale(1.01);
+    }
+    #startDmUid::placeholder {
+      color: #A0A8D0;
+      font-style: italic;
+      font-size: 0.85em;
+    }
+    #startDmUid:not(:placeholder-shown) {
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(107, 91, 255, 0.15));
+    }
+    .loading {
+      text-align: center;
+      color: #B0B8FF;
+      font-style: italic;
+      padding: 10px;
+    }
+    h3 {
+      font-family: 'Orbitron', sans-serif;
+      color: #00DDEB;
+      text-shadow: 0 0 6px rgba(0, 221, 235, 0.6);
+      margin: 0 0 12px 0;
+    }
   </style>
 
   <script src="https://www.gstatic.com/firebasejs/10.4.0/firebase-app-compat.js"></script>
@@ -637,8 +829,61 @@ document.addEventListener("DOMContentLoaded", () => {
         existingChatItems.set(div.dataset.chatId, div);
       });
       const dmBox = document.getElementById('dmBox');
+
+      // Handle Global Chat separately (above search bar)
+      let globalDiv = null;
+      for (let chatId in chats) {
+        if (chatId === 'global_chat') {
+          let div = existingChatItems.get(chatId);
+          if (!div) {
+            div = document.createElement('div');
+            div.classList.add('chatItem');
+            div.dataset.chatId = chatId;
+          } else {
+            existingChatItems.delete(chatId);
+          }
+          const chatMetaSnap = await db.ref(`chats/${chatId}`).once('value');
+          const chatMeta = chatMetaSnap.val() || {};
+          let displayText = '';
+          if (chatMeta.isGroup) {
+            displayText = chatMeta.title || chatId;
+          } else {
+            displayText = chatId;
+          }
+          if (div.innerHTML !== displayText) {
+            div.innerHTML = displayText;
+          }
+          if (chatId === currentChatId) {
+            div.classList.add('activeChat');
+          } else {
+            div.classList.remove('activeChat');
+          }
+          div.onclick = () => {
+            currentChatId = chatId;
+            unreadDMs[chatId] = 0;
+            db.ref(`userChats/${currentUid}/${chatId}/unreadCount`).set(0);
+            updateChatListBadges();
+            updateTitle();
+            document.querySelectorAll('.chatItem').forEach(el => el.classList.remove('activeChat'));
+            div.classList.add('activeChat');
+            const updates = {};
+            updates[`/userChats/${currentUid}/${chatId}/lastReadTimestamp`] = Date.now();
+            db.ref().update(updates);
+            listenMessages(chatId);
+            setupAllUnreadListeners();
+          };
+          globalDiv = div;
+          break;
+        }
+      }
+      if (globalDiv && !globalDiv.parentNode) {
+        chatListDiv.insertBefore(globalDiv, dmBox);
+      }
+
+      // Handle other chats (below search bar)
       const fragment = document.createDocumentFragment();
       for (let chatId in chats) {
+        if (chatId === 'global_chat') continue;
         let div = existingChatItems.get(chatId);
         if (!div) {
           div = document.createElement('div');
@@ -741,8 +986,18 @@ document.addEventListener("DOMContentLoaded", () => {
           fragment.appendChild(div);
         }
       }
+
+      // Insert non-global chats after dmBox
+      const afterDmBox = dmBox.nextSibling;
+      if (afterDmBox) {
+        chatListDiv.insertBefore(fragment, afterDmBox);
+      } else {
+        chatListDiv.appendChild(fragment);
+      }
+
+      // Remove remaining existing items
       existingChatItems.forEach(div => div.remove());
-      chatListDiv.insertBefore(fragment, dmBox);
+
       updateChatListBadges();
       setupAllUnreadListeners();
     });
