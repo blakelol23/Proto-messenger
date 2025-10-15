@@ -66,13 +66,37 @@
     }
     button { padding:8px 12px; }
     .message strong { color: #007BFF; }
-    .chatItem { cursor: pointer; padding: 6px; border-bottom: 1px solid #eee; position: relative; }
+    .chatItem { 
+      cursor: pointer; 
+      padding: 8px; 
+      border-bottom: 1px solid #eee; 
+      position: relative; 
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
     .chatItem:hover { background: #e9f4ff; }
     .activeChat { background: #d0f8ff !important; }
     .badge { background:red; color:white; border-radius:50%; padding:2px 6px; font-size:0.8em; position:absolute; top:4px; right:6px; }
-    .online-dot { display: inline-block; width: 8px; height: 8px; background: #4CAF50; border-radius: 50%; margin-left: 4px; }
-    .offline-dot { display: inline-block; width: 8px; height: 8px; background: #ccc; border-radius: 50%; margin-left: 4px; }
-    .status-text { font-size: 0.8em; margin-left: 4px; }
+    .online-dot, .offline-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      margin: 0;
+    }
+    .online-dot { background: #4CAF50; }
+    .offline-dot { background: #ccc; }
+    .status-span {
+      font-size: 0.75em;
+      color: #666;
+      background: #f8f8f8;
+      padding: 2px 6px;
+      border-radius: 4px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .status-text { line-height: 1.2; }
     .status-text.online { color: #4CAF50; }
     .status-text.offline { color: #666; }
     #typingIndicator { 
@@ -128,11 +152,14 @@ document.addEventListener("DOMContentLoaded", () => {
   function getDeviceUsername() {
     let username = localStorage.getItem('deviceUsername');
     if (username) return username;
-    username = prompt("Enter your device username:", "") || "User";
+    username = prompt("Enter your device username:", "");
+    if (!username || username.trim() === "") {
+      username = `User_${Math.random().toString(36).slice(2, 10)}`;
+    }
     localStorage.setItem('deviceUsername', username);
     return username;
   }
-  const deviceUsername = getDeviceUsername();
+  let deviceUsername = getDeviceUsername();
   console.log("Using username:", deviceUsername);
 
   // Firebase config
@@ -158,22 +185,33 @@ document.addEventListener("DOMContentLoaded", () => {
   let typingTimeout = null;
   let onDisconnectRef = null;
   let unreadDMs = {};
-  let chatListeners = {}; // For unread listeners per background chat
-  let onlineListeners = {}; // For online status listeners per user
+  let chatListeners = {};
+  let onlineListeners = {};
+  let lastSeenCache = {};
   let loadedMessageIds = new Set();
   let messagePageSize = 50;
   let oldestMessageTimestamp = null;
   let newestMessageTimestamp = null;
   let isLoadingMore = false;
 
-  auth.signInAnonymously().then(()=>console.log("Signed in anonymously"));
+  // Update offline statuses periodically
+  setInterval(() => {
+    document.querySelectorAll('.status-text.offline').forEach(span => {
+      const chatItem = span.closest('.chatItem');
+      const otherUid = chatItem.dataset.otherUid;
+      if (otherUid && lastSeenCache[otherUid]) {
+        span.textContent = `Last seen: ${calculateTimeAgo(lastSeenCache[otherUid])}`;
+      }
+    });
+  }, 60000);
+
+  auth.signInAnonymously().then(() => console.log("Signed in anonymously"));
 
   auth.onAuthStateChanged(user => {
     if (user) {
       currentUid = user.uid;
       console.log("Current UID:", currentUid);
       storeUserProfile().then(() => {
-        // Request notification permission
         if ('Notification' in window && Notification.permission === 'default') {
           Notification.requestPermission().then(permission => {
             console.log('Notification permission:', permission);
@@ -186,16 +224,28 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // Online status
   function setupOnlineStatus() {
     const userRef = db.ref(`/userProfiles/${currentUid}`);
     userRef.child('online').set(true);
     userRef.child('online').onDisconnect().remove();
     userRef.child('lastSeen').onDisconnect().set(firebase.database.ServerValue.TIMESTAMP);
+    setInterval(() => {
+      userRef.child('lastSeen').set(firebase.database.ServerValue.TIMESTAMP)
+        .catch(err => console.warn("Heartbeat failed:", err));
+    }, 30000);
   }
 
   async function storeUserProfile() {
     if (!currentUid || !deviceUsername) return;
+    const usernameRef = db.ref(`usernameToUid/${deviceUsername}`);
+    const snap = await usernameRef.once('value');
+    if (snap.exists() && snap.val() !== currentUid) {
+      let newUsername = prompt(`Username "${deviceUsername}" is taken. Choose a new one:`, "");
+      if (!newUsername) newUsername = `User_${currentUid.slice(0, 8)}`;
+      localStorage.setItem('deviceUsername', newUsername);
+      deviceUsername = newUsername;
+      return storeUserProfile();
+    }
     const updates = {};
     updates[`/userProfiles/${currentUid}/username`] = deviceUsername;
     updates[`/userProfiles/${currentUid}/lastSeen`] = firebase.database.ServerValue.TIMESTAMP;
@@ -204,7 +254,7 @@ document.addEventListener("DOMContentLoaded", () => {
     console.log(`Stored profile: ${deviceUsername} -> ${currentUid}`);
   }
 
-  function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
   function calculateTimeAgo(timestamp) {
     const now = Date.now();
@@ -212,7 +262,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const minutes = Math.floor(diff / 60000);
     const hours = Math.floor(minutes / 60);
     const days = Math.floor(hours / 24);
-
     if (minutes < 1) return 'just now';
     if (minutes < 60) return `${minutes}m ago`;
     if (hours < 24) return `${hours}h ago`;
@@ -224,7 +273,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const time = msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString() : '';
     msgEl.classList.add("message");
     msgEl.innerHTML = `<strong>${escapeHtml(msg.userName || 'Anonymous')}</strong>: ${escapeHtml(msg.text || '')} <span style="float:right;opacity:0.7;font-size:0.8em">${time}</span>`;
-
     if (isPrepend) {
       chatBox.insertBefore(msgEl, chatBox.firstChild);
     } else {
@@ -236,17 +284,15 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // Desktop notification
   function showDesktopNotification(title, body) {
     if (Notification.permission !== 'granted') return;
     const notification = new Notification(escapeHtml(title), {
       body: escapeHtml(body),
-      icon: '/favicon.ico', // Replace with your icon if available
+      icon: '/favicon.ico',
       tag: 'chat-message'
     });
   }
 
-  // Unread listener setup for a single background chat
   function setupUnreadListener(chatId, lastRead) {
     if (chatListeners[chatId]) {
       chatListeners[chatId].off();
@@ -255,8 +301,11 @@ document.addEventListener("DOMContentLoaded", () => {
     const ref = db.ref(`messages/${chatId}`).orderByChild('timestamp').startAt(lastRead + 1);
     ref.on('child_added', snap => {
       const msg = snap.val();
-      if (msg.isGlobal || msg.user === currentUid) return; // Skip global and own messages
+      if (msg.isGlobal || msg.user === currentUid) return;
       unreadDMs[chatId] = (unreadDMs[chatId] || 0) + 1;
+      db.ref(`userChats/${currentUid}/${chatId}/unreadCount`)
+        .set(unreadDMs[chatId])
+        .catch(err => console.warn("Failed to update unreadCount:", err));
       updateChatListBadges();
       updateTitle();
       showDesktopNotification(msg.userName || 'Someone', msg.text || '');
@@ -264,9 +313,7 @@ document.addEventListener("DOMContentLoaded", () => {
     chatListeners[chatId] = ref;
   }
 
-  // Setup listeners for all non-current chats
   function setupAllUnreadListeners() {
-    // Clean up existing
     Object.keys(chatListeners).forEach(id => {
       chatListeners[id].off();
       delete chatListeners[id];
@@ -282,16 +329,13 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // Infinite scroll
   function loadMessagePage(chatId, isInitial = false) {
     if (isLoadingMore && !isInitial) return;
     isLoadingMore = true;
-
     let ref = db.ref(`messages/${chatId}`).orderByChild('timestamp').limitToLast(messagePageSize);
     if (!isInitial && oldestMessageTimestamp !== null) {
       ref = ref.endBefore(oldestMessageTimestamp);
     }
-
     ref.once('value', snap => {
       const messages = [];
       const newMsgIds = [];
@@ -305,20 +349,15 @@ document.addEventListener("DOMContentLoaded", () => {
           newOldest = msg.timestamp;
         }
       });
-
-      // Add to loaded set
       newMsgIds.forEach(id => loadedMessageIds.add(id));
-
       const prevScrollHeight = chatBox.scrollHeight;
       const wasAtBottom = chatBox.scrollHeight - chatBox.scrollTop <= chatBox.clientHeight + 1;
-
       if (isInitial) {
         messages.forEach(msg => appendMessage(msg, false));
       } else {
         messages.reverse().forEach(msg => appendMessage(msg, true));
         chatBox.scrollTop = chatBox.scrollHeight - prevScrollHeight;
       }
-
       if (messages.length > 0) {
         const batchOldest = messages[0].timestamp;
         const batchNewest = messages[messages.length - 1].timestamp;
@@ -329,21 +368,16 @@ document.addEventListener("DOMContentLoaded", () => {
           oldestMessageTimestamp = batchOldest;
         }
       }
-
       if (wasAtBottom && isInitial) {
         chatBox.scrollTop = chatBox.scrollHeight;
       }
-
-      // Show/hide loading
-      const loadingEl = document.querySelector('.loading');
-      if (loadingEl) loadingEl.remove();
+      document.querySelectorAll('.loading').forEach(el => el.remove());
       if (!isInitial && messages.length === messagePageSize) {
         const loadMoreEl = document.createElement('div');
         loadMoreEl.classList.add('loading');
         loadMoreEl.textContent = 'Loading older messages...';
         chatBox.insertBefore(loadMoreEl, chatBox.firstChild);
       }
-
       isLoadingMore = false;
     }).catch(err => {
       console.error('Load error:', err);
@@ -359,21 +393,16 @@ document.addEventListener("DOMContentLoaded", () => {
     };
   }
 
-  // --- Messages & Typing ---
   async function listenMessages(chatId) {
     if (chatListener) chatListener();
     if (typingListenerRef) typingListenerRef.off();
-
     chatBox.innerHTML = "";
     loadedMessageIds.clear();
     oldestMessageTimestamp = null;
     newestMessageTimestamp = null;
     isLoadingMore = false;
-
     loadMessagePage(chatId, true);
     setupScrollListener();
-
-    // Listen for new messages (only future ones)
     const startTime = newestMessageTimestamp ? newestMessageTimestamp + 1 : 0;
     const newMsgRef = db.ref(`messages/${chatId}`).orderByChild('timestamp').startAt(startTime);
     newMsgRef.on('child_added', snap => {
@@ -387,8 +416,6 @@ document.addEventListener("DOMContentLoaded", () => {
     chatListener = () => {
       newMsgRef.off();
     };
-
-    // Check for missed messages during race (small window)
     setTimeout(() => {
       const currentTime = Date.now();
       if (currentTime > (newestMessageTimestamp || 0)) {
@@ -411,7 +438,6 @@ document.addEventListener("DOMContentLoaded", () => {
         });
       }
     }, 100);
-
     listenTyping(chatId);
     setupOnDisconnectForTyping(chatId);
   }
@@ -443,8 +469,9 @@ document.addEventListener("DOMContentLoaded", () => {
   function handleTyping() {
     setTypingFlag(true);
     if (typingTimeout) clearTimeout(typingTimeout);
-    typingTimeout = setTimeout(()=>setTypingFlag(false), 2000);
+    typingTimeout = setTimeout(() => setTypingFlag(false), 2000);
   }
+
   function clearTypingFlagImmediate() {
     if (!currentChatId || !currentUid) return;
     const ref = db.ref(`typing/${currentChatId}/${currentUid}`);
@@ -475,14 +502,12 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         names.push(name);
       }
-
       if (names.length === 1) typingIndicator.textContent = `${names[0]} is typing...`;
       else if (names.length === 2) typingIndicator.textContent = `${names[0]} and ${names[1]} are typing...`;
       else typingIndicator.textContent = `${names.slice(0,2).join(', ')} and ${names.length-2} others are typing...`;
     });
   }
 
-  // --- Send message ---
   async function sendMessage() {
     if (!currentChatId) return alert("Select a chat first!");
     const text = messageInput.value.trim();
@@ -497,64 +522,55 @@ document.addEventListener("DOMContentLoaded", () => {
       text, 
       timestamp: firebase.database.ServerValue.TIMESTAMP,
       clientTimestamp,
-      isGlobal: currentChatId==='global_chat' 
+      isGlobal: currentChatId === 'global_chat' 
     };
-
-    // Optimistic append with client time for display
-    const optimisticMsg = { ...messageObj, timestamp: clientTimestamp };
     loadedMessageIds.add(messageId);
-    appendMessage(optimisticMsg, false);
-
+    appendMessage({ ...messageObj, timestamp: clientTimestamp }, false);
     const updates = {};
     updates[`/messages/${currentChatId}/${messageId}`] = messageObj;
     updates[`/chats/${currentChatId}/lastMessage`] = { text, sender: currentUid, timestamp: firebase.database.ServerValue.TIMESTAMP };
-
     await db.ref().update(updates);
     clearTypingFlagImmediate();
     messageInput.value = "";
   }
   sendBtn.addEventListener("click", sendMessage);
-  messageInput.addEventListener("keyup", e=>{ if(e.key==="Enter") sendMessage(); });
+  messageInput.addEventListener("keyup", e => { if (e.key === "Enter") sendMessage(); });
 
-  // --- Global Chat ---
   async function joinGlobalChat() {
     const chatId = "global_chat";
     const chatRef = db.ref(`chats/${chatId}`);
     const snap = await chatRef.once('value');
     if (!snap.exists()) {
-      await chatRef.set({ title:"Global Chat", isGroup:true, participants:{}, createdAt:Date.now() });
+      await chatRef.set({ title: "Global Chat", isGroup: true, participants: {}, createdAt: Date.now() });
     }
     const updates = {};
     updates[`/chats/${chatId}/participants/${currentUid}`] = true;
-    updates[`/userChats/${currentUid}/${chatId}`] = { chatId, lastReadTimestamp: Date.now(), unreadCount:0, nickname:"Me" };
+    updates[`/userChats/${currentUid}/${chatId}`] = { chatId, lastReadTimestamp: Date.now(), unreadCount: 0, nickname: "Me" };
     await db.ref().update(updates);
     currentChatId = chatId;
     listenMessages(chatId);
-    setupAllUnreadListeners(); // Setup after initial load
+    setupAllUnreadListeners();
   }
 
-  // --- DM Helpers ---
-  function makeDMId(uidA, uidB){ return [uidA,uidB].sort().join('_'); }
+  function makeDMId(uidA, uidB) { return [uidA, uidB].sort().join('_'); }
 
-  async function createDMByUsername(username){
-    if(!currentUid) return alert("Not signed in yet");
+  async function createDMByUsername(username) {
+    if (!currentUid) return alert("Not signed in yet");
     const uidSnap = await db.ref(`usernameToUid/${username}`).once('value');
     const otherUid = uidSnap.val();
-    if(!otherUid) return alert(`User "${username}" not found.`);
-    if(otherUid===currentUid) return alert("Cannot DM yourself!");
+    if (!otherUid) return alert(`User "${username}" not found.`);
+    if (otherUid === currentUid) return alert("Cannot DM yourself!");
     const chatId = makeDMId(currentUid, otherUid);
     const chatRef = db.ref(`chats/${chatId}`);
     const chatSnap = await chatRef.once('value');
     const updates = {};
-    if(!chatSnap.exists()){
-      const chatData = { isGroup:false, participants:{[currentUid]:true,[otherUid]:true}, createdAt:Date.now() };
+    if (!chatSnap.exists()) {
+      const chatData = { isGroup: false, participants: { [currentUid]: true, [otherUid]: true }, createdAt: Date.now() };
       updates[`/chats/${chatId}`] = chatData;
     }
-    // Always add to current user's userChats, even if chat exists
-    updates[`/userChats/${currentUid}/${chatId}`] = { chatId, lastReadTimestamp: Date.now(), unreadCount:0 };
-    // Add to other if chat new
+    updates[`/userChats/${currentUid}/${chatId}`] = { chatId, lastReadTimestamp: Date.now(), unreadCount: 0 };
     if (!chatSnap.exists()) {
-      updates[`/userChats/${otherUid}/${chatId}`] = { chatId, lastReadTimestamp: 0, unreadCount:0 };
+      updates[`/userChats/${otherUid}/${chatId}`] = { chatId, lastReadTimestamp: 0, unreadCount: 0 };
     }
     await db.ref().update(updates);
     currentChatId = chatId;
@@ -562,81 +578,87 @@ document.addEventListener("DOMContentLoaded", () => {
     updateChatListBadges();
     updateTitle();
     listenMessages(chatId);
-    setupAllUnreadListeners(); // Re-setup after switch
+    setupAllUnreadListeners();
   }
 
-  startDmBtn.addEventListener('click', ()=>{
+  startDmBtn.addEventListener('click', () => {
     const username = startDmUid.value.trim();
-    if(!username) return alert("Enter username");
+    if (!username) return alert("Enter username");
     createDMByUsername(username).catch(console.error);
     startDmUid.value = '';
   });
-  startDmUid.addEventListener('keyup', e=>{
-    if(e.key==="Enter"){
+  startDmUid.addEventListener('keyup', e => {
+    if (e.key === "Enter") {
       const username = startDmUid.value.trim();
-      if(!username) return alert("Enter username");
+      if (!username) return alert("Enter username");
       createDMByUsername(username).catch(console.error);
-      startDmUid.value='';
+      startDmUid.value = '';
     }
   });
 
-  // --- Load User Chats & badges ---
   function updateChatListBadges() {
-    document.querySelectorAll('.chatItem').forEach(div=>{
+    document.querySelectorAll('.chatItem').forEach(div => {
       const chatId = div.dataset.chatId;
       const badgeSpan = div.querySelector('.badge');
-      if(unreadDMs[chatId]) {
-        if(!badgeSpan){
+      if (unreadDMs[chatId]) {
+        if (!badgeSpan) {
           const span = document.createElement('span');
           span.classList.add('badge');
           span.textContent = unreadDMs[chatId];
           div.appendChild(span);
-        } else { badgeSpan.textContent = unreadDMs[chatId]; }
+        } else {
+          badgeSpan.textContent = unreadDMs[chatId];
+        }
       } else {
-        if(badgeSpan) badgeSpan.remove();
+        if (badgeSpan) badgeSpan.remove();
       }
     });
   }
 
-  function updateTitle(){
-    const totalUnread = Object.values(unreadDMs).reduce((a,b)=>a+b,0);
-    document.title = totalUnread>0 ? `(${totalUnread}) Firebase Multi-Chat` : "Firebase Multi-Chat";
+  function updateTitle() {
+    const totalUnread = Object.values(unreadDMs).reduce((a, b) => a + b, 0);
+    document.title = totalUnread > 0 ? `(${totalUnread}) Firebase Multi-Chat` : "Firebase Multi-Chat";
   }
 
-  function loadUserChats(){
-    if(!currentUid) return;
-    db.ref(`userChats/${currentUid}`).on('value', async snap=>{
-      // Clean up old listeners
+  function loadUserChats() {
+    if (!currentUid) return;
+    db.ref(`userChats/${currentUid}`).on('value', async snap => {
       Object.keys(onlineListeners).forEach(uid => {
         if (onlineListeners[uid]) onlineListeners[uid].off();
       });
       onlineListeners = {};
-
+      const chats = snap.val() || {};
+      unreadDMs = {};
+      for (let chatId in chats) {
+        unreadDMs[chatId] = chats[chatId].unreadCount || 0;
+      }
+      const existingChatItems = new Map();
+      document.querySelectorAll('.chatItem').forEach(div => {
+        existingChatItems.set(div.dataset.chatId, div);
+      });
       const dmBox = document.getElementById('dmBox');
-      chatListDiv.innerHTML='<h3>Your Chats</h3>';
-      chatListDiv.appendChild(dmBox);
-      const chats = snap.val()||{};
-
-      for(let chatId in chats){
+      const fragment = document.createDocumentFragment();
+      for (let chatId in chats) {
+        let div = existingChatItems.get(chatId);
+        if (!div) {
+          div = document.createElement('div');
+          div.classList.add('chatItem');
+          div.dataset.chatId = chatId;
+        } else {
+          existingChatItems.delete(chatId);
+        }
         const chatMetaSnap = await db.ref(`chats/${chatId}`).once('value');
-        const chatMeta = chatMetaSnap.val()||{};
-        const div = document.createElement('div');
-        div.classList.add('chatItem');
-        div.dataset.chatId = chatId;
-
+        const chatMeta = chatMetaSnap.val() || {};
         let displayText = '';
         let initialStatusHtml = '';
-
-        if(chatMeta.isGroup) {
+        if (chatMeta.isGroup) {
           displayText = chatMeta.title || chatId;
         } else {
-          const otherUid = chatMeta.participants ? Object.keys(chatMeta.participants).filter(uid=>uid!==currentUid)[0]:'';
-          if(otherUid){
+          const otherUid = chatMeta.participants ? Object.keys(chatMeta.participants).filter(uid => uid !== currentUid)[0] : '';
+          if (otherUid) {
             div.dataset.otherUid = otherUid;
             const profileSnap = await db.ref(`userProfiles/${otherUid}/username`).once('value');
-            const otherUsername = profileSnap.val()||otherUid;
-
-            // Initial status
+            const otherUsername = profileSnap.val() || otherUid;
             const onlineSnap = await db.ref(`userProfiles/${otherUid}/online`).once('value');
             const isOnline = onlineSnap.val() === true;
             let statusDot, statusTextClass, statusText;
@@ -649,79 +671,87 @@ document.addEventListener("DOMContentLoaded", () => {
               statusTextClass = 'status-text offline';
               const lastSeenSnap = await db.ref(`userProfiles/${otherUid}/lastSeen`).once('value');
               const lastSeen = lastSeenSnap.val();
+              lastSeenCache[otherUid] = lastSeen;
               statusText = lastSeen ? `Last seen: ${calculateTimeAgo(lastSeen)}` : 'Last seen: unknown';
             }
-            initialStatusHtml = `${statusDot}<span class="${statusTextClass}">${statusText}</span>`;
+            initialStatusHtml = `${statusDot}<span class="${statusTextClass}" aria-live="polite">${statusText}</span>`;
             displayText = `DM: ${otherUsername}`;
-
-            // Attach real-time listener for this user
-            const onlineRef = db.ref(`userProfiles/${otherUid}/online`);
-            onlineRef.on('value', async (statusSnap) => {
-              const currentIsOnline = statusSnap.val() === true;
-              let newStatusHtml = '';
-              let newStatusDot, newStatusTextClass, newStatusText;
-              if (currentIsOnline) {
-                newStatusDot = '<span class="online-dot"></span>';
-                newStatusTextClass = 'status-text online';
-                newStatusText = 'Online';
-              } else {
-                newStatusDot = '<span class="offline-dot"></span>';
-                newStatusTextClass = 'status-text offline';
-                const lastSeenSnap = await db.ref(`userProfiles/${otherUid}/lastSeen`).once('value');
-                const lastSeen = lastSeenSnap.val();
-                newStatusText = lastSeen ? `Last seen: ${calculateTimeAgo(lastSeen)}` : 'Last seen: unknown';
-              }
-              newStatusHtml = `${newStatusDot}<span class="${newStatusTextClass}">${newStatusText}</span>`;
-              const currentDiv = document.querySelector(`[data-otherUid="${otherUid}"]`);
-              if (currentDiv) {
-                const statusSpan = currentDiv.querySelector('.status-span');
-                if (statusSpan) {
-                  statusSpan.innerHTML = newStatusHtml;
+            if (!onlineListeners[otherUid]) {
+              const onlineRef = db.ref(`userProfiles/${otherUid}/online`);
+              onlineRef.on('value', async (statusSnap) => {
+                const currentIsOnline = statusSnap.val() === true;
+                let newStatusHtml = '';
+                let newStatusDot, newStatusTextClass, newStatusText;
+                if (currentIsOnline) {
+                  newStatusDot = '<span class="online-dot"></span>';
+                  newStatusTextClass = 'status-text online';
+                  newStatusText = 'Online';
+                } else {
+                  newStatusDot = '<span class="offline-dot"></span>';
+                  newStatusTextClass = 'status-text offline';
+                  const lastSeenSnap = await db.ref(`userProfiles/${otherUid}/lastSeen`).once('value');
+                  const lastSeen = lastSeenSnap.val();
+                  lastSeenCache[otherUid] = lastSeen;
+                  newStatusText = lastSeen ? `Last seen: ${calculateTimeAgo(lastSeen)}` : 'Last seen: unknown';
                 }
-              }
-            });
-            onlineListeners[otherUid] = onlineRef;
+                newStatusHtml = `${newStatusDot}<span class="${newStatusTextClass}" aria-live="polite">${newStatusText}</span>`;
+                const currentDiv = document.querySelector(`[data-otherUid="${otherUid}"]`);
+                if (currentDiv) {
+                  const statusSpan = currentDiv.querySelector('.status-span');
+                  if (statusSpan) {
+                    statusSpan.innerHTML = newStatusHtml;
+                  }
+                }
+              });
+              onlineListeners[otherUid] = onlineRef;
+            }
           } else {
             displayText = chatId;
           }
         }
-
-        div.innerHTML = displayText;
-        if (initialStatusHtml) {
-          const statusSpan = document.createElement('span');
-          statusSpan.className = 'status-span';
-          statusSpan.innerHTML = initialStatusHtml;
-          div.appendChild(statusSpan);
+        if (div.innerHTML !== displayText || !div.querySelector('.status-span')) {
+          div.innerHTML = displayText;
+          if (initialStatusHtml) {
+            const statusSpan = document.createElement('span');
+            statusSpan.className = 'status-span';
+            statusSpan.innerHTML = initialStatusHtml;
+            div.appendChild(statusSpan);
+          }
         }
-
-        div.onclick = ()=>{
+        if (chatId === currentChatId) {
+          div.classList.add('activeChat');
+        } else {
+          div.classList.remove('activeChat');
+        }
+        div.onclick = () => {
           currentChatId = chatId;
-          unreadDMs[chatId]=0;
+          unreadDMs[chatId] = 0;
+          db.ref(`userChats/${currentUid}/${chatId}/unreadCount`).set(0);
           updateChatListBadges();
           updateTitle();
-          document.querySelectorAll('.chatItem').forEach(el=>el.classList.remove('activeChat'));
+          document.querySelectorAll('.chatItem').forEach(el => el.classList.remove('activeChat'));
           div.classList.add('activeChat');
-
-          // Update lastReadTimestamp on open
           const updates = {};
           updates[`/userChats/${currentUid}/${chatId}/lastReadTimestamp`] = Date.now();
           db.ref().update(updates);
-
           listenMessages(chatId);
-          setupAllUnreadListeners(); // Re-setup for background chats
+          setupAllUnreadListeners();
         };
-
-        chatListDiv.appendChild(div);
+        if (!div.parentNode) {
+          fragment.appendChild(div);
+        }
       }
-      setupAllUnreadListeners(); // Initial setup
+      existingChatItems.forEach(div => div.remove());
+      chatListDiv.insertBefore(fragment, dmBox);
+      updateChatListBadges();
+      setupAllUnreadListeners();
     });
   }
 
-  window.addEventListener('beforeunload', ()=>{
-    if(currentChatId && currentUid){
-      try{ db.ref(`typing/${currentChatId}/${currentUid}`).remove(); }catch(e){}
+  window.addEventListener('beforeunload', () => {
+    if (currentChatId && currentUid) {
+      try { db.ref(`typing/${currentChatId}/${currentUid}`).remove(); } catch(e) {}
     }
-    // Clean up listeners
     Object.keys(chatListeners).forEach(id => {
       chatListeners[id].off();
     });
